@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Procesador de Gestiones</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 Procesador de Gestiones</h1>
+            <p>Procesa automáticamente archivos Excel de DMIRO, MACHALA y Pacífico</p>
+        </div>
+
+        <div class="content">
+            <!-- Botones de opciones -->
+            <div class="options-container">
+                <h2>Selecciona el tipo de procesamiento:</h2>
+                <div class="options-buttons">
+                    <button class="option-btn" id="btnNumeroGestiones" data-option="numero_gestiones">
+                        <div class="option-icon">📊</div>
+                        <div class="option-title">Número Gestiones</div>
+                        <div class="option-desc">Contar gestiones por ID</div>
+                    </button>
+                    <button class="option-btn" id="btnTiempoMuerto" data-option="tiempo_muerto">
+                        <div class="option-icon">⏱️</div>
+                        <div class="option-title">Tiempo Muerto</div>
+                        <div class="option-desc">Analizar tiempo muerto</div>
+                    </button>
+                    <button class="option-btn active" id="btnMejorRespuesta" data-option="mejor_respuesta">
+                        <div class="option-icon">🎯</div>
+                        <div class="option-title">Mejor Respuesta</div>
+                        <div class="option-desc">Mejor y peor gestión por ID</div>
+                    </button>
+                    <button class="option-btn" id="btnConsolidarComentarios" data-option="consolidar_comentarios">
+                        <div class="option-icon">💬</div>
+                        <div class="option-title">Consolidar Comentarios</div>
+                        <div class="option-desc">Unir comentarios por Número Crédito</div>
+                    </button>
+                    <button class="option-btn" id="btnLlamadasDia" data-option="llamadas_dia">
+                        <div class="option-icon">📞</div>
+                        <div class="option-title">Reporte Llamadas/Día</div>
+                        <div class="option-desc">Conteo diario por agente</div>
+                    </button>
+                </div>
+            </div>
+
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📁</div>
+                <div class="upload-text">Arrastra archivos Excel aquí</div>
+                <div class="upload-subtext">o haz clic para seleccionar archivos</div>
+                <input type="file" id="fileInput" multiple accept=".xlsx,.xls">
+            </div>
+
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+            </div>
+
+            <div class="status" id="status"></div>
+
+            <!-- Contenedor específico para Reporte Llamadas/Día -->
+            <div class="llamadas-dia-container" id="llamadasDiaContainer" style="display: none;">
+                <div class="stats-container">
+                    <div class="stat-card">
+                        <div class="stat-value" id="totalCalls">0</div>
+                        <div class="stat-label">Llamadas Totales</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="uniqueAgents">0</div>
+                        <div class="stat-label">Agentes Únicos</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="dateRange">-</div>
+                        <div class="stat-label">Rango de Fechas</div>
+                    </div>
+                </div>
+
+                <div class="top-agents-container">
+                    <h4>🏆 Top 3 Agentes</h4>
+                    <div id="topAgents"></div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="results-table" id="llamadasTable">
+                        <thead id="llamadasTableHeader">
+                            <!-- Encabezado dinámico -->
+                        </thead>
+                        <tbody id="llamadasTableBody">
+                            <!-- Datos dinámicos -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="export-buttons">
+                    <button class="export-btn" id="exportLlamadasExcel">
+                        📥 Exportar a Excel
+                    </button>
+                    <button class="export-btn secondary" id="resetLlamadasReport">
+                        🔄 Nuevo Reporte
+                    </button>
+                </div>
+            </div>
+
+            <!-- Contenedor para resultados generales -->
+            <div class="results" id="results">
+                <h3>📊 Resultados del Procesamiento</h3>
+                <div id="resultsContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts separados por funcionalidad -->
+    <script src="core.js"></script>
+    <script src="procesadores/mejor-respuesta.js"></script>
+    <script src="procesadores/numero-gestiones.js"></script>
+    <script src="procesadores/tiempo-muerto.js"></script>
+    <script src="procesadores/consolidar-comentarios.js"></script>
+    <script src="procesadores/llamadas-dia.js"></script>
+    
+    <script>
+        // Inicialización adicional para evitar problemas
+        document.addEventListener('DOMContentLoaded', function() {
+            // Limpiar el input file cuando se cambie de opción
+            document.querySelectorAll('.option-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.getElementById('fileInput').value = '';
+                });
+            });
+            
+            // Prevenir clic en el área de upload si hay contenido
+            document.getElementById('uploadArea').addEventListener('click', function(e) {
+                // Si hay archivos procesados, no abrir el selector
+                if (processedFiles && processedFiles.length > 0) {
+                    const confirmar = confirm('¿Desea procesar nuevos archivos? Los datos actuales se perderán.');
+                    if (!confirmar) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>
