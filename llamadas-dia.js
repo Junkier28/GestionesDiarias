@@ -205,7 +205,7 @@ function generarTablaLlamadas(agentesData, fechas, agentes) {
     tbody.appendChild(filaTotales);
 }
 
-// Exportar a Excel
+// Exportar a Excel (versión corregida - mantiene todos los agentes)
 async function exportarLlamadasDia(datos, nombreArchivo) {
     try {
         const agentesData = datos.agentesData;
@@ -214,12 +214,14 @@ async function exportarLlamadasDia(datos, nombreArchivo) {
         
         // Crear workbook
         const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Reporte Llamadas');
+        
+        // --- HOJA 1: REPORTE LLAMADAS COMPLETO ---
+        const worksheet = workbook.addWorksheet('Reporte Llamadas Completo');
         
         // Título
         worksheet.mergeCells('A1:C1');
         const titleCell = worksheet.getCell('A1');
-        titleCell.value = 'REPORTE DE LLAMADAS POR DÍA';
+        titleCell.value = 'REPORTE DE LLAMADAS POR DÍA (COMPLETO)';
         titleCell.style = {
             font: { bold: true, size: 16, color: { argb: 'FFFFFF' } },
             fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: '2C3E50' } },
@@ -228,10 +230,10 @@ async function exportarLlamadasDia(datos, nombreArchivo) {
         
         // Estadísticas
         worksheet.addRow([]);
-        const statsRow = worksheet.addRow(['Estadísticas Generales', '', '']);
+        const statsRow = worksheet.addRow(['Estadísticas Generales - COMPLETO', '', '']);
         statsRow.font = { bold: true };
         
-        worksheet.addRow(['Total Llamadas', datos.todosRegistros.length, '']);
+        worksheet.addRow(['Total Llamadas (con duplicados)', datos.todosRegistros.length, '']);
         worksheet.addRow(['Agentes Únicos', agentes.length, '']);
         
         if (fechas.length > 0) {
@@ -258,7 +260,7 @@ async function exportarLlamadasDia(datos, nombreArchivo) {
             };
         });
         
-        // Datos por agente
+        // Datos por agente (COMPLETO)
         const totalesDia = {};
         fechas.forEach(f => totalesDia[f] = 0);
         
@@ -286,7 +288,7 @@ async function exportarLlamadasDia(datos, nombreArchivo) {
             });
         });
         
-        // Fila de totales
+        // Fila de totales (COMPLETO)
         worksheet.addRow([]);
         const totalesFila = ['TOTAL DIARIO'];
         let totalGeneral = 0;
@@ -317,9 +319,9 @@ async function exportarLlamadasDia(datos, nombreArchivo) {
             column.width = Math.min(maxLength + 2, 50);
         });
         
-        // Segunda hoja con detalle
+        // --- HOJA 2: DETALLE COMPLETO ---
         if (datos.todosRegistros.length > 0) {
-            const detalleSheet = workbook.addWorksheet('Detalle');
+            const detalleSheet = workbook.addWorksheet('Detalle Completo');
             
             // Obtener columnas del primer registro
             const primerRegistro = datos.todosRegistros[0].registroCompleto;
@@ -336,7 +338,7 @@ async function exportarLlamadasDia(datos, nombreArchivo) {
                 };
             });
             
-            // Datos
+            // Datos completos (todos los registros)
             datos.todosRegistros.forEach(registro => {
                 const fila = columnas.map(col => registro.registroCompleto[col]);
                 fila.push(registro.fecha);
@@ -352,6 +354,363 @@ async function exportarLlamadasDia(datos, nombreArchivo) {
                 });
                 column.width = Math.min(maxLength + 2, 30);
             });
+            
+            // Agregar estadísticas
+            detalleSheet.addRow([]);
+            detalleSheet.addRow(['ESTADÍSTICAS DEL DETALLE (COMPLETO)', '', '', '', '', '', '', '']);
+            detalleSheet.addRow(['Total de registros (con duplicados):', datos.todosRegistros.length]);
+        }
+        
+        // Variables que necesitamos fuera del bloque if
+        let documentosConflictivos = [];
+        let registrosUnicos = [];
+        let campoUnico = null;
+        let columnas = [];
+        
+        // --- HOJA 3: REPORTE LLAMADAS SIN REPETIR ---
+        // Primero necesitamos procesar los datos sin duplicados
+        if (datos.todosRegistros.length > 0) {
+            // Identificar campo único
+            const primerRegistro = datos.todosRegistros[0].registroCompleto;
+            columnas = Object.keys(primerRegistro);
+            
+            const posiblesCamposUnicos = ['Número Credito', 'Numero Credito', 'Número Crédito', 
+                                          'Documento', 'Nro Credito', 'Credito', 'Credit', 
+                                          'NroDocumento', 'NúmeroDocumento', 'Cédula',
+                                          'Identificación', 'ID Cliente'];
+            
+            for (const campo of posiblesCamposUnicos) {
+                if (columnas.includes(campo)) {
+                    campoUnico = campo;
+                    break;
+                }
+            }
+            
+            // 1. Filtrar registros únicos
+            registrosUnicos = [];
+            const valoresUnicos = new Set();
+            
+            // 2. Detectar documentos gestionados por múltiples agentes
+            const documentosMultiplesAgentes = new Map(); // documento -> [agentes]
+            
+            datos.todosRegistros.forEach(registro => {
+                let valorUnico = null;
+                
+                if (campoUnico) {
+                    valorUnico = registro.registroCompleto[campoUnico];
+                    
+                    // Registrar qué agente gestionó este documento
+                    if (valorUnico) {
+                        if (!documentosMultiplesAgentes.has(valorUnico.toString())) {
+                            documentosMultiplesAgentes.set(valorUnico.toString(), new Set());
+                        }
+                        documentosMultiplesAgentes.get(valorUnico.toString()).add(registro.agente);
+                    }
+                } else {
+                    // Si no hay campo específico, usar combinación de varios campos
+                    const camposAlternativos = ['Agente', 'Fecha', 'Cliente', 'Nombre'];
+                    valorUnico = camposAlternativos
+                        .filter(campo => registro.registroCompleto[campo])
+                        .map(campo => registro.registroCompleto[campo])
+                        .join('_');
+                }
+                
+                if (valorUnico && !valoresUnicos.has(valorUnico.toString())) {
+                    valoresUnicos.add(valorUnico.toString());
+                    registrosUnicos.push(registro);
+                }
+            });
+            
+            // Filtrar documentos con múltiples agentes (2 o más)
+            documentosConflictivos = [];
+            documentosMultiplesAgentes.forEach((agentesSet, documento) => {
+                if (agentesSet.size > 1) {
+                    documentosConflictivos.push({
+                        documento: documento,
+                        agentes: Array.from(agentesSet),
+                        cantidadAgentes: agentesSet.size
+                    });
+                }
+            });
+            
+            // Ordenar por cantidad de agentes (descendente)
+            documentosConflictivos.sort((a, b) => b.cantidadAgentes - a.cantidadAgentes);
+            
+            // 3. Crear estructura de datos para reporte sin duplicados
+            // Inicializar TODOS los agentes (incluso si tienen 0 registros únicos)
+            const agentesDataUnicos = {};
+            const fechasSetUnicos = new Set();
+            
+            agentes.forEach(agente => {
+                agentesDataUnicos[agente] = {
+                    diario: {},
+                    total: 0
+                };
+            });
+            
+            // Procesar registros únicos
+            registrosUnicos.forEach(registro => {
+                const agenteNombre = registro.agente;
+                const fechaStr = registro.fecha;
+                
+                if (!agentesDataUnicos[agenteNombre].diario[fechaStr]) {
+                    agentesDataUnicos[agenteNombre].diario[fechaStr] = 0;
+                }
+                
+                agentesDataUnicos[agenteNombre].diario[fechaStr]++;
+                agentesDataUnicos[agenteNombre].total++;
+                fechasSetUnicos.add(fechaStr);
+            });
+            
+            const fechasUnicas = Array.from(fechasSetUnicos).sort();
+            // Mantener MISMO orden de agentes que en el reporte completo
+            const agentesUnicos = agentes; // Usar misma lista
+            
+            // Crear hoja de reporte sin duplicados
+            const reporteUnicoSheet = workbook.addWorksheet('Reporte Sin Duplicados');
+            
+            // Título
+            reporteUnicoSheet.mergeCells('A1:D1');
+            const titleUnicoCell = reporteUnicoSheet.getCell('A1');
+            titleUnicoCell.value = 'REPORTE DE LLAMADAS POR DÍA (SIN DUPLICADOS)';
+            titleUnicoCell.style = {
+                font: { bold: true, size: 16, color: { argb: 'FFFFFF' } },
+                fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: '27AE60' } },
+                alignment: { horizontal: 'center', vertical: 'middle' }
+            };
+            
+            // Estadísticas específicas para sin duplicados
+            reporteUnicoSheet.addRow([]);
+            const statsUnicoRow = reporteUnicoSheet.addRow(['Estadísticas - SIN DUPLICADOS', '', '', '']);
+            statsUnicoRow.font = { bold: true };
+            
+            reporteUnicoSheet.addRow(['Total registros únicos:', registrosUnicos.length, '', '']);
+            reporteUnicoSheet.addRow(['Total registros originales:', datos.todosRegistros.length, '', '']);
+            reporteUnicoSheet.addRow(['Registros eliminados (duplicados):', datos.todosRegistros.length - registrosUnicos.length, '', '']);
+            reporteUnicoSheet.addRow(['Porcentaje de reducción:', `${((1 - (registrosUnicos.length / datos.todosRegistros.length)) * 100).toFixed(2)}%`, '', '']);
+            reporteUnicoSheet.addRow(['Campo utilizado:', campoUnico || 'Combinación de campos', '', '']);
+            reporteUnicoSheet.addRow(['Total agentes:', agentesUnicos.length, '', '']);
+            reporteUnicoSheet.addRow(['Agentes con 0 registros únicos:', 
+                agentesUnicos.filter(a => agentesDataUnicos[a].total === 0).length, '', '']);
+            
+            // Información de documentos gestionados por múltiples agentes
+            if (documentosConflictivos.length > 0) {
+                reporteUnicoSheet.addRow([]);
+                reporteUnicoSheet.addRow(['DOCUMENTOS GESTIONADOS POR MÚLTIPLES AGENTES', '', '', '']);
+                reporteUnicoSheet.addRow(['Total documentos con múltiples agentes:', documentosConflictivos.length, '', '']);
+                reporteUnicoSheet.addRow(['Documento con más agentes:', 
+                    documentosConflictivos.length > 0 ? 
+                    `${documentosConflictivos[0].documento} (${documentosConflictivos[0].cantidadAgentes} agentes)` : 
+                    'N/A', '', '']);
+            }
+            
+            reporteUnicoSheet.addRow([]);
+            
+            // Encabezados de tabla sin duplicados
+            if (fechasUnicas.length > 0) {
+                const headersUnicos = ['Agente', ...fechasUnicas.map(f => {
+                    const fechaObj = new Date(f);
+                    return fechaObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+                }), 'TOTAL'];
+                
+                const headerUnicoRow = reporteUnicoSheet.addRow(headersUnicos);
+                
+                headerUnicoRow.eachCell((cell) => {
+                    cell.style = {
+                        font: { bold: true, color: { argb: 'FFFFFF' } },
+                        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: '27AE60' } },
+                        alignment: { horizontal: 'center' }
+                    };
+                });
+                
+                // Datos por agente (SIN DUPLICADOS) - TODOS los agentes
+                const totalesDiaUnicos = {};
+                fechasUnicas.forEach(f => totalesDiaUnicos[f] = 0);
+                
+                agentesUnicos.forEach((agente, index) => {
+                    const fila = [agente];
+                    let totalAgente = 0;
+                    
+                    fechasUnicas.forEach(fecha => {
+                        const conteo = agentesDataUnicos[agente].diario[fecha] || 0;
+                        fila.push(conteo);
+                        totalAgente += conteo;
+                        totalesDiaUnicos[fecha] += conteo;
+                    });
+                    
+                    fila.push(totalAgente);
+                    const dataRow = reporteUnicoSheet.addRow(fila);
+                    
+                    // Resaltar agentes con 0 registros únicos
+                    if (totalAgente === 0) {
+                        dataRow.eachCell((cell) => {
+                            cell.style = {
+                                fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEBEE' } },
+                                alignment: { horizontal: 'center' },
+                                font: { italic: true, color: { argb: '757575' } }
+                            };
+                        });
+                    } else {
+                        // Colores alternados normales
+                        const fillColor = index % 2 === 0 ? 'F0F8F0' : 'FFFFFF';
+                        dataRow.eachCell((cell) => {
+                            cell.style = {
+                                fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: fillColor } },
+                                alignment: { horizontal: 'center' }
+                            };
+                        });
+                    }
+                });
+                
+                // Fila de totales (SIN DUPLICADOS)
+                reporteUnicoSheet.addRow([]);
+                const totalesFilaUnicos = ['TOTAL DIARIO'];
+                let totalGeneralUnicos = 0;
+                
+                fechasUnicas.forEach(fecha => {
+                    totalesFilaUnicos.push(totalesDiaUnicos[fecha]);
+                    totalGeneralUnicos += totalesDiaUnicos[fecha];
+                });
+                
+                totalesFilaUnicos.push(totalGeneralUnicos);
+                const totalUnicoRow = reporteUnicoSheet.addRow(totalesFilaUnicos);
+                
+                totalUnicoRow.eachCell((cell) => {
+                    cell.style = {
+                        font: { bold: true },
+                        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F39C12' } },
+                        alignment: { horizontal: 'center' }
+                    };
+                });
+                
+                // Autoajustar columnas
+                reporteUnicoSheet.columns.forEach((column, index) => {
+                    let maxLength = 0;
+                    column.eachCell({ includeEmpty: true }, (cell) => {
+                        const length = cell.value ? cell.value.toString().length : 10;
+                        if (length > maxLength) maxLength = length;
+                    });
+                    column.width = Math.min(maxLength + 2, 50);
+                });
+            }
+            
+            // --- HOJA 4: DETALLE SIN REPETIR ---
+            const detalleUnicoSheet = workbook.addWorksheet('Detalle Sin Repetir');
+            
+            // Encabezados
+            const detalleUnicoHeaders = [...columnas, 'Fecha Procesada'];
+            const detalleUnicoHeaderRow = detalleUnicoSheet.addRow(detalleUnicoHeaders);
+            
+            detalleUnicoHeaderRow.eachCell((cell) => {
+                cell.style = {
+                    font: { bold: true },
+                    fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'D5F4E6' } }
+                };
+            });
+            
+            // Ordenar registros únicos por fecha y agente
+            registrosUnicos.sort((a, b) => {
+                if (a.fecha === b.fecha) {
+                    return a.agente.localeCompare(b.agente);
+                }
+                return a.fecha.localeCompare(b.fecha);
+            });
+            
+            // Agregar datos únicos a la hoja
+            registrosUnicos.forEach(registro => {
+                const fila = columnas.map(col => registro.registroCompleto[col]);
+                fila.push(registro.fecha);
+                detalleUnicoSheet.addRow(fila);
+            });
+            
+            // Autoajustar columnas
+            detalleUnicoSheet.columns.forEach((column) => {
+                let maxLength = 0;
+                column.eachCell({ includeEmpty: true }, (cell) => {
+                    const length = cell.value ? cell.value.toString().length : 10;
+                    if (length > maxLength) maxLength = length;
+                });
+                column.width = Math.min(maxLength + 2, 30);
+            });
+            
+            // Agregar estadísticas
+            detalleUnicoSheet.addRow([]);
+            detalleUnicoSheet.addRow(['ESTADÍSTICAS - DETALLE SIN DUPLICADOS', '', '', '', '', '', '', '']);
+            detalleUnicoSheet.addRow(['Total registros únicos:', registrosUnicos.length]);
+            detalleUnicoSheet.addRow(['Campo utilizado para eliminar duplicados:', campoUnico || 'Combinación de campos']);
+            detalleUnicoSheet.addRow(['Fecha de generación:', new Date().toLocaleString()]);
+        }
+        
+        // --- HOJA 5: DOCUMENTOS CON MÚLTIPLES AGENTES (OPCIONAL) ---
+        // SOLO si hay documentos gestionados por múltiples agentes
+        if (documentosConflictivos && documentosConflictivos.length > 0) {
+            const conflictosSheet = workbook.addWorksheet('Doc Multiples Agentes');
+            
+            // Título
+            conflictosSheet.mergeCells('A1:D1');
+            const titleConflictCell = conflictosSheet.getCell('A1');
+            titleConflictCell.value = 'DOCUMENTOS GESTIONADOS POR MÚLTIPLES AGENTES';
+            titleConflictCell.style = {
+                font: { bold: true, size: 16, color: { argb: 'FFFFFF' } },
+                fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'E74C3C' } },
+                alignment: { horizontal: 'center', vertical: 'middle' }
+            };
+            
+            conflictosSheet.addRow([]);
+            conflictosSheet.addRow(['Estadísticas de Conflictos', '', '', '']);
+            conflictosSheet.addRow(['Total documentos con múltiples agentes:', documentosConflictivos.length]);
+            conflictosSheet.addRow(['Promedio de agentes por documento:', 
+                (documentosConflictivos.reduce((sum, doc) => sum + doc.cantidadAgentes, 0) / documentosConflictivos.length).toFixed(2)]);
+            
+            conflictosSheet.addRow([]);
+            
+            // Encabezados
+            const conflictHeaders = ['Documento/Crédito', 'Cantidad de Agentes', 'Agentes Involucrados'];
+            const conflictHeaderRow = conflictosSheet.addRow(conflictHeaders);
+            
+            conflictHeaderRow.eachCell((cell) => {
+                cell.style = {
+                    font: { bold: true, color: { argb: 'FFFFFF' } },
+                    fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'E74C3C' } }
+                };
+            });
+            
+            // Datos de conflictos
+            documentosConflictivos.forEach((doc, index) => {
+                const fila = [
+                    doc.documento,
+                    doc.cantidadAgentes,
+                    doc.agentes.join(', ')
+                ];
+                
+                const dataRow = conflictosSheet.addRow(fila);
+                
+                // Resaltar según cantidad de agentes
+                let bgColor = 'FFFFFF';
+                if (doc.cantidadAgentes >= 4) {
+                    bgColor = 'FFEBEE'; // Rojo claro para muchos conflictos
+                } else if (doc.cantidadAgentes === 3) {
+                    bgColor = 'FFF3E0'; // Naranja claro
+                } else if (doc.cantidadAgentes === 2) {
+                    bgColor = 'F3E5F5'; // Púrpura claro
+                }
+                
+                dataRow.eachCell((cell) => {
+                    cell.style = {
+                        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } }
+                    };
+                });
+            });
+            
+            // Autoajustar columnas
+            conflictosSheet.columns.forEach((column) => {
+                let maxLength = 0;
+                column.eachCell({ includeEmpty: true }, (cell) => {
+                    const length = cell.value ? cell.value.toString().length : 10;
+                    if (length > maxLength) maxLength = length;
+                });
+                column.width = Math.min(maxLength + 2, 40);
+            });
         }
         
         // Descargar
@@ -366,14 +725,20 @@ async function exportarLlamadasDia(datos, nombreArchivo) {
         
         const nombreBase = nombreArchivo.replace(/\.[^/.]+$/, "");
         const fechaHoy = new Date().toISOString().split('T')[0];
-        a.download = `${nombreBase}_reporte_llamadas_${fechaHoy}.xlsx`;
+        const hojasCount = documentosConflictivos && documentosConflictivos.length > 0 ? 5 : 4;
+        a.download = `${nombreBase}_reporte_${hojasCount}hojas_${fechaHoy}.xlsx`;
         
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
         
-        showStatus('Reporte exportado exitosamente', 'success');
+        let mensaje = 'Reporte exportado exitosamente con 4 hojas';
+        if (documentosConflictivos && documentosConflictivos.length > 0) {
+            mensaje = `Reporte exportado con ${hojasCount} hojas (incluye ${documentosConflictivos.length} documentos con múltiples agentes)`;
+        }
+        
+        showStatus(mensaje, 'success');
         
     } catch (error) {
         console.error('Error al exportar reporte de llamadas:', error);
