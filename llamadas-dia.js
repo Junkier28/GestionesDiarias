@@ -868,7 +868,9 @@ async function exportarLlamadasDia(datos, nombreArchivo) {
                 'GESTION CORREO',
                 'CONTACTO INDIRECTO',
                 'CONTACTO DIRECTO',
-                'GESTION TERRENO'
+                'GESTION TERRENO',
+                'CONTACTO NO EFECTIVO', 
+                'CONTACTO EFECTIVO'
             ];
 
             // Mapeo flexible para diferentes nombres
