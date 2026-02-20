@@ -4,6 +4,14 @@ function procesarMejorRespuesta(data, tipo) {
     const nivelColumna = tipo === 'dmiro' ? 'Nivel 2' : 'Nivel 3';
     const idColumna = tipo === 'dmiro' ? 'Documento' : 'Número Credito';
     
+    console.log('=== MEJOR RESPUESTA DEBUG ===');
+    console.log('TIPO:', tipo);
+    console.log('NIVEL COLUMNA:', nivelColumna);
+    console.log('ID COLUMNA:', idColumna);
+    console.log('PRIMERA FILA COMPLETA:', JSON.stringify(data[0]));
+    console.log('COLUMNAS DISPONIBLES:', Object.keys(data[0]));
+    console.log('JERARQUIA:', jerarquia);
+    
     const grupos = {};
     
     // Agrupar por ID
@@ -14,6 +22,18 @@ function procesarMejorRespuesta(data, tipo) {
         if (!grupos[id]) grupos[id] = [];
         grupos[id].push(row);
     });
+    
+    console.log('TOTAL GRUPOS (IDs únicos):', Object.keys(grupos).length);
+    
+    // Mostrar el primer grupo como ejemplo
+    const primerId = Object.keys(grupos)[0];
+    if (primerId) {
+        console.log('EJEMPLO - ID:', primerId);
+        console.log('EJEMPLO - FILAS:', grupos[primerId].length);
+        grupos[primerId].forEach((row, i) => {
+            console.log(`EJEMPLO - FILA ${i}: Nivel=${row[nivelColumna]}, Comentarios=${row['Comentarios']}`);
+        });
+    }
     
     const resultado = [];
     
@@ -34,6 +54,8 @@ function procesarMejorRespuesta(data, tipo) {
             // Buscar la fila exacta que tiene la mejor gestión
             const filaMejor = grupo.find(row => row[nivelColumna] === mejor);
             
+            console.log(`ID ${id} -> Mejor: ${mejor}, FilaMejor encontrada: ${!!filaMejor}, Comentarios: ${filaMejor ? filaMejor['Comentarios'] : 'NO ENCONTRADA'}`);
+            
             const filaEjemplo = { ...grupo[0] };
             filaEjemplo['Mejor Gestión'] = mejor;
             filaEjemplo['Comentario Mejor Gestión'] = filaMejor ? (filaMejor['Comentarios'] || '') : '';
@@ -43,6 +65,9 @@ function procesarMejorRespuesta(data, tipo) {
             resultado.push(filaEjemplo);
         }
     });
+    
+    console.log('TOTAL RESULTADO:', resultado.length);
+    console.log('=== FIN DEBUG ===');
     
     return resultado;
 }
