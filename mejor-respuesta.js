@@ -3,7 +3,7 @@ function procesarMejorRespuesta(data, tipo) {
     const jerarquia = config.jerarquias[tipo];
     const nivelColumna = tipo === 'dmiro' ? 'Nivel 2' : 'Nivel 3';
     const idColumna = tipo === 'dmiro' ? 'Documento' : 'Número Credito';
-    const comentarioColumna = tipo === 'dmiro' ? 'Comentario' : 'Comentario';
+    const comentarioColumna = tipo === 'dmiro' ? 'Comentarios' : 'Comentarios';
     
     const grupos = {};
     
