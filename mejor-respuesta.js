@@ -10,7 +10,6 @@ function procesarMejorRespuesta(data, tipo) {
     data.forEach(row => {
         const id = row[idColumna];
         if (!id) return;
-
         if (!grupos[id]) grupos[id] = [];
         grupos[id].push(row);
     });
@@ -20,37 +19,29 @@ function procesarMejorRespuesta(data, tipo) {
     Object.keys(grupos).forEach(id => {
         const grupo = grupos[id];
 
-        // Solo filas que tengan un nivel válido en la jerarquía (comparación sin mayúsculas/minúsculas)
-        const filasValidas = grupo.filter(row => {
+        // Mapear cada fila a su índice en la jerarquía (-1 si no está)
+        const filasConIndice = grupo.map(row => {
             const nivel = (row[nivelColumna] || '').trim().toUpperCase();
-            return jerarquia.some(j => j.toUpperCase() === nivel);
-        });
-
-        if (filasValidas.length === 0) return;
-
-        // Calcular índice en la jerarquía para cada fila válida
-        const filasConIndice = filasValidas.map(row => {
-            const nivel = (row[nivelColumna] || '').trim().toUpperCase();
-            const idx = jerarquia.findIndex(j => j.toUpperCase() === nivel);
+            const idx = jerarquia.findIndex(j => j.trim().toUpperCase() === nivel);
             return { row, idx };
-        });
+        }).filter(f => f.idx !== -1); // solo filas con nivel válido
+
+        if (filasConIndice.length === 0) return;
 
         const maxIdx = Math.max(...filasConIndice.map(f => f.idx));
         const minIdx = Math.min(...filasConIndice.map(f => f.idx));
 
-        const mejor = jerarquia[maxIdx];
-        const peor = jerarquia[minIdx];
-
-        // Fila específica que tiene la mejor gestión → tomar su Comentarios
+        // Fila exacta de la MEJOR gestión → para tomar SU comentario
         const filaMejor = filasConIndice.find(f => f.idx === maxIdx).row;
+        const filaPeor  = filasConIndice.find(f => f.idx === minIdx).row;
 
-        // Usar la primera fila del grupo como base de datos generales
-        const filaBase = { ...grupo[0] };
+        // Base: usamos la fila de la mejor gestión como referencia principal
+        const filaBase = { ...filaMejor };
 
-        filaBase['Mejor Gestión'] = mejor;
+        filaBase['Mejor Gestión']            = jerarquia[maxIdx];
         filaBase['Comentario Mejor Gestión'] = filaMejor['Comentarios'] || '';
-        filaBase['Peor Gestión'] = peor;
-        filaBase['Total Gestiones'] = grupo.length;
+        filaBase['Peor Gestión']             = jerarquia[minIdx];
+        filaBase['Total Gestiones']          = grupo.length;
 
         resultado.push(filaBase);
     });
