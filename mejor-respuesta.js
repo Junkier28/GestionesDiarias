@@ -1,5 +1,8 @@
 // Procesador de Mejor Respuesta
 function procesarMejorRespuesta(data, tipo) {
+        console.log('TIPO:', tipo);
+    console.log('PRIMERA FILA:', JSON.stringify(data[0]));
+    console.log('JERARQUIA:', config.jerarquias[tipo]);
     const jerarquia = config.jerarquias[tipo];
     const nivelColumna = tipo === 'dmiro' ? 'Nivel 2' : 'Nivel 3';
     const idColumna = tipo === 'dmiro' ? 'Documento' : 'Número Credito';
@@ -60,3 +63,4 @@ async function exportarMejorRespuesta(datos, nombreArchivo) {
 // Exportar al scope global
 window.procesarMejorRespuesta = procesarMejorRespuesta;
 window.exportarMejorRespuesta = exportarMejorRespuesta;
+
