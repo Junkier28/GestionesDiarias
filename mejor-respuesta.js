@@ -3,6 +3,7 @@ function procesarMejorRespuesta(data, tipo) {
     const jerarquia = config.jerarquias[tipo];
     const nivelColumna = tipo === 'dmiro' ? 'Nivel 2' : 'Nivel 3';
     const idColumna = tipo === 'dmiro' ? 'Documento' : 'Número Credito';
+    const comentarioColumna = tipo === 'dmiro' ? 'Comentario' : 'Comentario';
     
     const grupos = {};
     
@@ -31,8 +32,12 @@ function procesarMejorRespuesta(data, tipo) {
             const peor = jerarquia[minIndex];
             const mejor = jerarquia[maxIndex];
             
+            // Buscar la fila que corresponde a la mejor gestión
+            const filaMejor = grupo.find(row => row[nivelColumna] === mejor) || grupo[0];
+            
             const filaEjemplo = { ...grupo[0] };
             filaEjemplo['Mejor Gestión'] = mejor;
+            filaEjemplo['Comentario Mejor Gestión'] = filaMejor[comentarioColumna] || '';
             filaEjemplo['Peor Gestión'] = peor;
             filaEjemplo['Total Gestiones'] = grupo.length;
             
