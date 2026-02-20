@@ -1,65 +1,60 @@
-// Procesador de Consolidar Comentarios
-function procesarConsolidarComentarios(data, tipo) {
-    // Solo funciona para Pacífico
-    if (tipo === 'dmiro') {
-        showStatus('Esta función solo está disponible para archivos de Pacífico', 'error');
-        return [];
-    }
+// Procesador de Mejor Respuesta
+function procesarMejorRespuesta(data, tipo) {
+    const jerarquia = config.jerarquias[tipo];
+    const nivelColumna = tipo === 'dmiro' ? 'Nivel 2' : 'Nivel 3';
+    const idColumna = tipo === 'dmiro' ? 'Documento' : 'Número Credito';
     
-    const idColumna = 'Número Credito';
-    const comentariosColumna = 'Comentarios';
-    
-    // Agrupar por Número Crédito
     const grupos = {};
     
+    // Agrupar por ID
     data.forEach(row => {
-        const numeroCredito = row[idColumna];
-        const comentario = row[comentariosColumna];
+        const id = row[idColumna];
+        if (!id) return;
         
-        if (!numeroCredito) return;
-        
-        // Inicializar grupo si no existe
-        if (!grupos[numeroCredito]) {
-            grupos[numeroCredito] = {
-                primeraFila: { ...row },
-                comentarios: []
-            };
-        }
-        
-        // Agregar comentario si existe
-        if (comentario && comentario.toString().trim() !== '') {
-            grupos[numeroCredito].comentarios.push(comentario.toString().trim());
-        }
+        if (!grupos[id]) grupos[id] = [];
+        grupos[id].push(row);
     });
     
-    // Crear resultado consolidado
     const resultado = [];
     
-    Object.keys(grupos).forEach(numeroCredito => {
-        const grupo = grupos[numeroCredito];
-        const filaConsolidada = { ...grupo.primeraFila };
+    Object.keys(grupos).forEach(id => {
+        const grupo = grupos[id];
+        const nivelesVal = grupo
+            .map(row => row[nivelColumna])
+            .filter(val => val && jerarquia.includes(val));
         
-        // Unir comentarios con punto y coma
-        if (grupo.comentarios.length > 0) {
-            filaConsolidada[comentariosColumna] = grupo.comentarios.join('; ');
-        } else {
-            filaConsolidada[comentariosColumna] = '';
+        if (nivelesVal.length > 0) {
+            const indices = nivelesVal.map(val => jerarquia.indexOf(val));
+            const minIndex = Math.min(...indices);
+            const maxIndex = Math.max(...indices);
+            
+            const peor = jerarquia[minIndex];
+            const mejor = jerarquia[maxIndex];
+            
+            // Buscar la fila exacta que tiene la mejor gestión
+            const filaMejor = grupo.find(row => row[nivelColumna] === mejor);
+            
+            const filaEjemplo = { ...grupo[0] };
+            filaEjemplo['Mejor Gestión'] = mejor;
+            filaEjemplo['Comentario Mejor Gestión'] = filaMejor ? (filaMejor['Comentarios'] || '') : '';
+            filaEjemplo['Peor Gestión'] = peor;
+            filaEjemplo['Total Gestiones'] = grupo.length;
+            
+            resultado.push(filaEjemplo);
         }
-        
-        resultado.push(filaConsolidada);
     });
     
     return resultado;
 }
 
 // Exportar a Excel
-async function exportarConsolidarComentarios(datos, nombreArchivo) {
+async function exportarMejorRespuesta(datos, nombreArchivo) {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(datos);
-    XLSX.utils.book_append_sheet(wb, ws, "Comentarios Consolidados");
+    XLSX.utils.book_append_sheet(wb, ws, "Mejor Respuesta");
     XLSX.writeFile(wb, nombreArchivo);
 }
 
 // Exportar al scope global
-window.procesarConsolidarComentarios = procesarConsolidarComentarios;
-window.exportarConsolidarComentarios = exportarConsolidarComentarios;
+window.procesarMejorRespuesta = procesarMejorRespuesta;
+window.exportarMejorRespuesta = exportarMejorRespuesta;
